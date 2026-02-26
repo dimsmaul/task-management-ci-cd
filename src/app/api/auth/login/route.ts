@@ -44,8 +44,7 @@ export async function POST(request: Request) {
       name: user.name,
     });
 
-    // Create response
-    const response = NextResponse.json(
+    return NextResponse.json(
       {
         success: true,
         message: 'Login successful',
@@ -60,16 +59,6 @@ export async function POST(request: Request) {
       },
       { status: 200 }
     );
-
-    // Set cookie
-    response.cookies.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
-
-    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

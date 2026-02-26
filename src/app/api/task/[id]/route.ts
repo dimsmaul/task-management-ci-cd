@@ -1,35 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { TaskStatus } from '@prisma/client';
 
 // POST /api/task/[id] - Update status from in_progress to testing
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    // Check for API key bypass
+    const authHeader = request.headers.get('authorization');
+    const isApiKeyValid = authHeader === `Bearer ${process.env.API_KEY}`;
+    let decoded: any = null;
 
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
+    if (!isApiKeyValid) {
+      // Get token from header
+      const token = getTokenFromRequest(request as unknown as Request);
+
+      if (!token) {
+        return NextResponse.json(
+          { success: false, message: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+
+      // Verify token
+      decoded = verifyToken(token);
+
+      if (!decoded) {
+        return NextResponse.json(
+          { success: false, message: 'Invalid token' },
+          { status: 401 }
+        );
+      }
     }
 
-    // Verify token
-    const decoded = verifyToken(token);
-
-    if (!decoded) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    const { id } = params; // Actually receives the code from frontend
+    const { id } = await params; // Actually receives the code from frontend
 
     // Check if task exists and belongs to user
     const task = await db.task.findUnique({
@@ -44,7 +51,7 @@ export async function POST(
     }
 
     // Check ownership
-    if (task.userId !== decoded.userId) {
+    if (!isApiKeyValid && task.userId !== decoded?.userId) {
       return NextResponse.json(
         { success: false, message: 'Forbidden' },
         { status: 403 }

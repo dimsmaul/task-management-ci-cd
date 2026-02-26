@@ -11,24 +11,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For API routes, check for JWT token
-  if (pathname.startsWith('/api/')) {
-    const token = request.cookies.get('token')?.value;
+  // For API routes, check for JWT token inside Authorization Header
+  if (pathname.startsWith('/api/') && !publicPaths.some(path => pathname.startsWith(path))) {
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
     
-    if (!token) {
+    // We optionally permit bypass token if needed, or normal JWT token existence
+    if (!token && authHeader !== `Bearer ${process.env.API_KEY}`) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
       );
-    }
-  }
-
-  // For protected pages, check for JWT token in cookies
-  if (!pathname.startsWith('/api/')) {
-    const token = request.cookies.get('token')?.value;
-    
-    if (!token) {
-      return NextResponse.redirect(new URL('/login', request.url));
     }
   }
 

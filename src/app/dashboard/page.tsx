@@ -64,7 +64,16 @@ export default function DashboardPage() {
 
   const fetchUser = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+      const response = await fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await response.json();
       if (data.success) {
         setUser(data.data.user);
@@ -80,7 +89,11 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       const url = statusFilter !== 'all' ? `/api/tasks?status=${statusFilter}` : '/api/tasks';
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       const data = await response.json();
       if (data.success) {
         setTasks(data.data.tasks);
@@ -103,6 +116,7 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      localStorage.removeItem('token');
       router.push('/login');
     } catch (error) {
       toast({
@@ -122,6 +136,7 @@ export default function DashboardPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(createFormData),
       });
@@ -165,6 +180,7 @@ export default function DashboardPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify(editFormData),
       });
@@ -201,6 +217,9 @@ export default function DashboardPage() {
     try {
       const response = await fetch(`/api/tasks/${id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
 
       const data = await response.json();
@@ -250,6 +269,9 @@ export default function DashboardPage() {
     try {
       const response = await fetch(`/api/task/${taskCode}`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
 
       const data = await response.json();
@@ -280,6 +302,9 @@ export default function DashboardPage() {
     try {
       const response = await fetch(`/api/task-failed/${taskCode}`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
 
       const data = await response.json();

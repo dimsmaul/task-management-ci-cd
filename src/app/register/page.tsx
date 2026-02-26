@@ -58,6 +58,7 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (data.success) {
+        localStorage.setItem('token', data.data.token);
         toast({
           title: 'Success',
           description: data.message,

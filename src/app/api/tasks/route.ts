@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 // GET /api/tasks - Get all tasks for current user
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    // Get token from header
+    const token = getTokenFromRequest(request);
 
     if (!token) {
       return NextResponse.json(
@@ -63,10 +63,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/tasks - Create a new task
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    // Get token from header
+    const token = getTokenFromRequest(request);
 
     if (!token) {
       return NextResponse.json(

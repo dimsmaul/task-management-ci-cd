@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 
 // GET /api/tasks/[id] - Get a single task
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    const token = getTokenFromRequest(request as unknown as Request);
 
     if (!token) {
       return NextResponse.json(
@@ -28,11 +28,11 @@ export async function GET(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Get task
     const task = await db.task.findUnique({
-      where: { id },
+      where: { code: id },
     });
 
     if (!task) {
@@ -69,11 +69,11 @@ export async function GET(
 // PUT /api/tasks/[id] - Update a task
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    const token = getTokenFromRequest(request as unknown as Request);
 
     if (!token) {
       return NextResponse.json(
@@ -92,7 +92,7 @@ export async function PUT(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { title, description, status } = body;
 
@@ -117,7 +117,7 @@ export async function PUT(
 
     // Update task
     const task = await db.task.update({
-      where: { id },
+      where: { id: existingTask.id },
       data: {
         ...(title !== undefined && { title: title.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
@@ -145,11 +145,11 @@ export async function PUT(
 // DELETE /api/tasks/[id] - Delete a task
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    const token = getTokenFromRequest(request as unknown as Request);
 
     if (!token) {
       return NextResponse.json(
@@ -168,7 +168,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Check if task exists and belongs to user
     const existingTask = await db.task.findUnique({
@@ -191,7 +191,7 @@ export async function DELETE(
 
     // Delete task
     await db.task.delete({
-      where: { id },
+      where: { id: existingTask.id },
     });
 
     return NextResponse.json(

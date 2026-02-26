@@ -1,29 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { TaskStatus } from '@prisma/client';
 
 // POST /api/bulk-task-failed - Bulk update tasks to fixing
 export async function POST(request: NextRequest) {
   try {
-    // Get token from cookie
-    const token = request.cookies.get('token')?.value;
+    // Check for API key bypass
+    const authHeader = request.headers.get('authorization');
+    const isApiKeyValid = authHeader === `Bearer ${process.env.API_KEY}`;
+    let decoded: any = null;
 
-    if (!token) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (!isApiKeyValid) {
+      // Get token from header
+      const token = getTokenFromRequest(request as unknown as Request);
 
-    // Verify token
-    const decoded = verifyToken(token);
+      if (!token) {
+        return NextResponse.json(
+          { success: false, message: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
 
-    if (!decoded) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid token' },
-        { status: 401 }
-      );
+      // Verify token
+      decoded = verifyToken(token);
+
+      if (!decoded) {
+        return NextResponse.json(
+          { success: false, message: 'Invalid token' },
+          { status: 401 }
+        );
+      }
     }
 
     const body = await request.json();
@@ -40,11 +47,16 @@ export async function POST(request: NextRequest) {
     // Use transaction for bulk update
     const result = await db.$transaction(async (tx) => {
       // Get all tasks that belong to the user
+      const whereClause: any = {
+        code: { in: ids },
+      };
+      
+      if (!isApiKeyValid) {
+        whereClause.userId = decoded?.userId;
+      }
+
       const tasks = await tx.task.findMany({
-        where: {
-          code: { in: ids },
-          userId: decoded.userId,
-        },
+        where: whereClause,
       });
 
       if (tasks.length === 0) {

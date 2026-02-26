@@ -33,6 +33,7 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
+        localStorage.setItem('token', data.data.token);
         toast({
           title: 'Success',
           description: data.message,
