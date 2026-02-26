@@ -1,0 +1,81 @@
+name: Feature → Dev
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [closed]
+
+jobs:
+  extract-task:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      task_code: ${{ steps.extract.outputs.task_code }}
+    steps:
+      - name: Extract Task Code from PR title
+        id: extract
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          # Extract dari format: feat: .... [DMA-001]
+          TASK_CODE=$(echo "$TITLE" | grep -oP '\[\K[A-Z]+-\d+(?=\])')
+          
+          if [ -z "$TASK_CODE" ]; then
+            echo "No task code found in PR title, skipping..."
+            echo "task_code=" >> $GITHUB_OUTPUT
+          else
+            echo "task_code=$TASK_CODE" >> $GITHUB_OUTPUT
+            echo "Found task: $TASK_CODE"
+          fi
+
+  build:
+    needs: extract-task
+    if: needs.extract-task.outputs.task_code != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        id: docker_build
+        run: |
+          docker build -t myapp:dev .
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
+            -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          docker tag myapp:dev ${{ secrets.DOCKER_REGISTRY }}/myapp:dev
+          docker push ${{ secrets.DOCKER_REGISTRY }}/myapp:dev
+
+  # SUCCESS: in_progress → testing
+  update-to-testing:
+    needs: [extract-task, build]
+    if: success() && needs.extract-task.outputs.task_code != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/task/:code → testing
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "${{ secrets.TASK_API_URL }}/api/task/${{ needs.extract-task.outputs.task_code }}" \
+            -H "Authorization: Bearer ${{ secrets.TASK_API_TOKEN }}" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "Response: $BODY"
+          echo "Status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Failed to update task status"
+            exit 1
+          fi
+
+  # FAILED: in_progress → fixing
+  update-to-fixing:
+    needs: [extract-task, build]
+    if: failure() && needs.extract-task.outputs.task_code != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/task-failed/:code → fixing
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.TASK_API_URL }}/api/task-failed/${{ needs.extract-task.outputs.task_code }}" \
+            -H "Authorization: Bearer ${{ secrets.TASK_API_TOKEN }}" \
+            -H "Content-Type: application/json"

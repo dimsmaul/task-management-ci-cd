@@ -1,0 +1,113 @@
+name: Dev → Staging
+
+on:
+  pull_request:
+    branches: [staging]
+    types: [closed]
+
+jobs:
+  extract-all-tasks:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      task_codes: ${{ steps.extract.outputs.task_codes }}
+      has_tasks: ${{ steps.extract.outputs.has_tasks }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract All Task Codes from commit log
+        id: extract
+        run: |
+          git fetch origin staging
+
+          # Baca semua commit message dari dev yang belum ada di staging
+          # Extract semua [DMA-XXX] pattern
+          TASK_CODES=$(git log origin/staging..HEAD --pretty=format:"%s" \
+            | grep -oP '\[\K[A-Z]+-\d+(?=\])' \
+            | sort -u \
+            | tr '\n' ' ')
+
+          if [ -z "$TASK_CODES" ]; then
+            echo "No task codes found"
+            echo "has_tasks=false" >> $GITHUB_OUTPUT
+            echo "task_codes=" >> $GITHUB_OUTPUT
+          else
+            # Format jadi JSON array: ["DMA-001","DMA-002"]
+            JSON_ARRAY=$(echo "$TASK_CODES" \
+              | tr ' ' '\n' \
+              | grep -v '^$' \
+              | awk '{printf "\"%s\",", $1}' \
+              | sed 's/,$//' \
+              | sed 's/.*/[&]/')
+
+            echo "has_tasks=true" >> $GITHUB_OUTPUT
+            echo "task_codes=$JSON_ARRAY" >> $GITHUB_OUTPUT
+            echo "Found tasks: $JSON_ARRAY"
+          fi
+
+  build:
+    needs: extract-all-tasks
+    if: needs.extract-all-tasks.outputs.has_tasks == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Push Docker Image (staging)
+        run: |
+          docker build -t myapp:staging .
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
+            -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          docker tag myapp:staging ${{ secrets.DOCKER_REGISTRY }}/myapp:staging
+          docker push ${{ secrets.DOCKER_REGISTRY }}/myapp:staging
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Staging
+        run: |
+          echo "Deploy step here..."
+          # ssh / kubectl / etc
+
+  # SUCCESS: bulk testing → staging (atau done, sesuaikan)
+  bulk-update-success:
+    needs: [extract-all-tasks, deploy]
+    if: success() && needs.extract-all-tasks.outputs.has_tasks == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /api/bulk-task → update status
+        run: |
+          curl -s -w "\n%{http_code}" \
+            -X POST "${{ secrets.TASK_API_URL }}/api/bulk-task" \
+            -H "Authorization: Bearer ${{ secrets.TASK_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "ids": ${{ needs.extract-all-tasks.outputs.task_codes }}
+            }'
+
+  # FAILED: bulk → fixing
+  bulk-update-failed:
+    needs: [extract-all-tasks, build, deploy]
+    if: failure() && needs.extract-all-tasks.outputs.has_tasks == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect failed job
+        id: detect
+        run: |
+          if [ "${{ needs.build.result }}" == "failure" ]; then
+            echo "stage=build-docker" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.deploy.result }}" == "failure" ]; then
+            echo "stage=deploy-staging" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Hit /api/bulk-task-failed → fixing
+        run: |
+          curl -s -w "\n%{http_code}" \
+            -X POST "${{ secrets.TASK_API_URL }}/api/bulk-task-failed" \
+            -H "Authorization: Bearer ${{ secrets.TASK_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "ids": ${{ needs.extract-all-tasks.outputs.task_codes }}
+            }'
