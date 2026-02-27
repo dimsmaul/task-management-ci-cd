@@ -575,7 +575,7 @@ export default function DashboardPage() {
                   value={editFormData.status}
                   onValueChange={(value: TaskStatus) => setEditFormData({ ...editFormData, status: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className='w-full'>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
