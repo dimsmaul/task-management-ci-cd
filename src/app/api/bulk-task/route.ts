@@ -3,7 +3,7 @@ import { verifyToken, getTokenFromRequest } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { TaskStatus } from '@prisma/client';
 
-// POST /api/bulk-task - Bulk update tasks from testing to fixing
+// POST /api/bulk-task - Bulk update tasks from testing to done
 export async function POST(request: NextRequest) {
   try {
     // Check for API key bypass
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
           id: { in: taskIds },
         },
         data: {
-          status: TaskStatus.fixing,
+          status: TaskStatus.done,
         },
       });
 

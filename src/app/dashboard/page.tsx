@@ -391,10 +391,10 @@ export default function DashboardPage() {
                       value={createFormData.status}
                       onValueChange={(value: TaskStatus) => setCreateFormData({ ...createFormData, status: value })}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className='w-full'>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className='w-full'>
                         {Object.entries(STATUS_CONFIG).map(([key, config]) => (
                           <SelectItem key={key} value={key}>
                             {config.label}
@@ -449,7 +449,7 @@ export default function DashboardPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[120px]">Code</TableHead>
-                  <TableHead className='w-2/3'>Title</TableHead>
+                  <TableHead className='w-1/2'>Title</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
